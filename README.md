@@ -19,17 +19,30 @@ dependencies:
 
 ## Usage
 
+A very primitive HTTP/2 server can be implemented as follows:
 
 ```crystal
 require "http2"
+
+def handle_connection(socket)
+  conn = HTTP2::Server.new(socket)
+  conn.on(:stream) do |emittable|
+    stream = emittable.to_stream
+    stream.on(:request) do |emittable|
+      stream = emittable.to_stream
+      puts "NEW REQUEST: #{stream.headers.inspect}"
+      stream.send_response([[":status", "200"], ["content-type", "text/html"]], "<h1>HELLO HTTP/2!</h1>".to_slice)
+    end
+  end
+  conn.work
+end
+
+server = TCPServer.new("127.0.0.1", 8080)
+loop { spawn handle_connection(server.accept) }
 ```
 
-
-TODO: Write usage instructions here
-
-## Development
-
-TODO: Write development instructions here
+The server doesn't have any kind of protocol negotiation support. This task is
+left to a load balancer for now. For development I'm using HAProxy for this.
 
 ## Contributing
 
