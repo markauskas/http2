@@ -29,10 +29,14 @@ module HTTP2
       end
 
       def get(index : UInt32)
+        raise Error.new(Error::Code::COMPRESSION_ERROR) if index == 0_u32
+
         if index <= @static_table.size
           @static_table[index - 1]
         elsif index <= size
           @dynamic_table[index - @static_table.size - 1]
+        else
+          raise Error.new(Error::Code::COMPRESSION_ERROR)
         end
       end
 
