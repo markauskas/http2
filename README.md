@@ -31,7 +31,10 @@ def handle_connection(socket)
     stream.on(:request) do |emittable|
       stream = emittable.to_stream
       puts "NEW REQUEST: #{stream.headers.inspect}"
-      stream.send_response([[":status", "200"], ["content-type", "text/html"]], "<h1>HELLO HTTP/2!</h1>".to_slice)
+      stream.send_response(
+        [[":status", "200"], ["content-type", "text/html"]],
+        "<h1>HELLO HTTP/2!</h1>".to_slice
+      )
     end
   end
   conn.work
