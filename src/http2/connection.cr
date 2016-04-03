@@ -57,10 +57,10 @@ module HTTP2
       send_frame(frame)
     end
 
-    def send_goaway(last_stream_id : UInt32, error_code : UInt32)
+    def send_goaway(error_code : Error::Code)
       payload = MemoryIO.new
-      payload.write_bytes(last_stream_id, IO::ByteFormat::BigEndian)
-      payload.write_bytes(error_code, IO::ByteFormat::BigEndian)
+      payload.write_bytes(@last_stream_id, IO::ByteFormat::BigEndian)
+      payload.write_bytes(error_code.value, IO::ByteFormat::BigEndian)
       frame = Frame.new(Frame::Type::GoAway, 0_u32, Frame::Flags::None, payload.to_slice)
       send_frame(frame)
     end
@@ -148,6 +148,12 @@ module HTTP2
         process_settings(frame)
       else
         raise NotImplementedError.new("Unsupported frame type: #{frame.type}")
+      end
+    rescue ex : Error
+      case ex.error_code
+      when Error::Code::FRAME_SIZE_ERROR
+        send_goaway(Error::Code::FRAME_SIZE_ERROR)
+        @io.close
       end
     end
 
