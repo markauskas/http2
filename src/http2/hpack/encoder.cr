@@ -7,7 +7,7 @@ module HTTP2
         @huffman = Huffman.new(Huffman::TABLE)
         @slice = Slice(UInt8).new(1)
         @pos = 0
-        @index = Index.new
+        @index = Index.new(4096)
       end
 
       def encode(headers : Array(Array(String)))

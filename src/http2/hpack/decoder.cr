@@ -5,7 +5,7 @@ module HTTP2
 
       def initialize
         @huffman = Huffman.new(Huffman::TABLE)
-        @index = Index.new
+        @index = Index.new(4096) # TODO: define correct value
         @slice = Slice(UInt8).new(1)
         @pos = 0
       end
