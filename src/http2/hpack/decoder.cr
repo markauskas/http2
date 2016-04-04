@@ -15,7 +15,15 @@ module HTTP2
         @pos = 0
         headers = [] of Array(String)
 
+        # window updates are only allowed at the beginning of the header block.
+        # after the first field that is not a window update, we won't allow
+        # window updates anymore
+        window_update_allowed = true
+
         while @pos < @slice.size
+          # will set to true if current field is a window update
+          window_update = false
+
           if peek.bit(7) == 1_u8
             idx = decode_integer(7)
             headers << index.get(idx)
@@ -32,8 +40,11 @@ module HTTP2
               headers << h
             end
           elsif peek.bit(5) == 1_u8
+            raise Error.new(Error::Code::COMPRESSION_ERROR) unless window_update_allowed
+
+            window_update = true
             new_size = decode_integer(5)
-            # TODO: do something with the number
+            index.max_table_size = new_size.to_i32
           elsif peek.bit(4) == 1_u8
             idx = decode_integer(4)
             name = idx == 0 ? String.new(decode_string) : index.get(idx)[0]
@@ -45,8 +56,13 @@ module HTTP2
             h = [name, String.new(decode_string)]
             headers << h
           end
+
+          window_update_allowed = window_update
         end
         headers
+      rescue ex : Error
+        # in case it's already an instance of Error, then we just re-raise it
+        raise ex
       rescue ex
         raise Error.new(Error::Code::COMPRESSION_ERROR)
       end
