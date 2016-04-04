@@ -3,12 +3,17 @@ module HTTP2
     # The Index class handles the static and dynamic tables as defined in
     # RFC 7541 (HPACK)
     class Index
-      property max_table_size : Int32
+      getter max_table_size : Int32
 
       def initialize(@max_table_size : Int32)
         @static_table = HTTP2::HPACK::Index::STATIC_TABLE # see end of this file
         @dynamic_table = Array(Array(String)).new
         @dynamic_table_bytesize = 0
+      end
+
+      def max_table_size=(value : Int32)
+        @max_table_size = value
+        evict(@max_table_size)
       end
 
       def size
@@ -26,15 +31,20 @@ module HTTP2
       def add(h : Array(String))
         new_entry_size = h[0].size + h[1].size + 32
         limit = max_table_size - new_entry_size
-        while @dynamic_table.size > 0 && @dynamic_table_bytesize > limit
-          last = @dynamic_table.pop
-          last_size = last[0].size + last[1].size + 32
-          @dynamic_table_bytesize -= last_size
-        end
+
+        evict(limit)
 
         if limit >= 0
           @dynamic_table.unshift(h)
           @dynamic_table_bytesize += new_entry_size
+        end
+      end
+
+      def evict(limit : Int32)
+        while @dynamic_table.size > 0 && @dynamic_table_bytesize > limit
+          last = @dynamic_table.pop
+          last_size = last[0].size + last[1].size + 32
+          @dynamic_table_bytesize -= last_size
         end
       end
 

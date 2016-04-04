@@ -34,6 +34,26 @@ describe HTTP2::HPACK::Index do
       index.bytesize.should eq 48
     end
 
+    it "evicts oldest entries on max_table_size updates" do
+      index = HTTP2::HPACK::Index.new(80)
+
+      index.add(["aa", "aa"])
+      index.size.should eq 62
+      index.bytesize.should eq 36
+
+      index.add(["bb", "bb"])
+      index.size.should eq 63
+      index.bytesize.should eq 72
+
+      index.max_table_size = 40
+      index.size.should eq 62
+      index.bytesize.should eq 36
+
+      index.max_table_size = 0
+      index.size.should eq 61
+      index.bytesize.should eq 0
+    end
+
     it "it leaves the table empty after attempting to add an entry larger than max_table_size" do
       index = HTTP2::HPACK::Index.new(80)
 
