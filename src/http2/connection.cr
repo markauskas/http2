@@ -152,7 +152,13 @@ module HTTP2
     rescue ex : Error
       case ex.error_code
       when Error::Code::FRAME_SIZE_ERROR
-        send_goaway(Error::Code::FRAME_SIZE_ERROR)
+        send_goaway(ex.error_code)
+        @io.close
+      when Error::Code::PROTOCOL_ERROR
+        send_goaway(ex.error_code)
+        @io.close
+      when Error::Code::COMPRESSION_ERROR
+        send_goaway(ex.error_code)
         @io.close
       end
     end

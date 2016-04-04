@@ -47,6 +47,8 @@ module HTTP2
           end
         end
         headers
+      rescue ex
+        raise Error.new(Error::Code::COMPRESSION_ERROR)
       end
 
       private def peek
