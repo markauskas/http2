@@ -1,5 +1,7 @@
 # http2
 
+[![Build Status](https://travis-ci.org/markauskas/http2.svg?branch=master)](https://travis-ci.org/markauskas/http2)
+
 HTTP/2 implementation in [Crystal](http://crystal-lang.org/). Heavily inspired
 by [igrigorik/http-2](https://github.com/igrigorik/http-2).
 
