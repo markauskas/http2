@@ -73,8 +73,8 @@ module HTTP2
     end
 
 
-    def headers(payload : Slice(UInt8))
-      f = Frame.new(Frame::Type::Headers, id, Frame::Flags::EndHeaders, payload)
+    def headers(payload : Slice(UInt8), flags = Frame::Flags::EndHeaders)
+      f = Frame.new(Frame::Type::Headers, id, flags, payload)
       emit(:frame, f)
     end
 
