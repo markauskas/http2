@@ -102,8 +102,11 @@ module HTTP2
 
     def find_or_create_stream(stream_id)
       unless @streams[stream_id]?
-        @streams[stream_id] = Stream.new(stream_id, self)
+        @streams[stream_id] = Stream.new(stream_id)
         emit(:stream, @streams[stream_id])
+        @streams[stream_id].on(:frame) do |emittable|
+          send_frame(emittable.to_frame)
+        end
       end
       @streams[stream_id]
     end
@@ -135,19 +138,19 @@ module HTTP2
       frame = receive_frame
       stream = find_or_create_stream(frame.stream_id)
 
-      if frame.stream_id != 0_u32
-        stream.receive(frame)
-      end
-
       case frame.type
       when Frame::Type::Headers
-        process_headers(frame)
+        stream.headers = process_headers(frame)
       when Frame::Type::WindowUpdate
         process_window_update(frame)
       when Frame::Type::Settings
         process_settings(frame)
       else
         raise NotImplementedError.new("Unsupported frame type: #{frame.type}")
+      end
+
+      if frame.stream_id != 0_u32
+        stream.receive(frame)
       end
     rescue ex : Error
       case ex.error_code
@@ -194,11 +197,7 @@ module HTTP2
         raise NotImplementedError.new("Process CONTINUATION frames")
       end
 
-      headers = hpack_decoder.decode(header_block)
-
-      # TODO: this looks wrong somehow
-      stream.headers = headers
-      stream.emit(:request, stream)
+      hpack_decoder.decode(header_block)
     end
 
     def process_window_update(frame)

@@ -21,7 +21,7 @@ module HTTP2
 
     property headers : Array(Array(String))
 
-    def initialize(@id : UInt32, @connection : Connection, @state : State = State::IDLE)
+    def initialize(@id : UInt32, @state : State = State::IDLE)
       @headers = Array(Array(String)).new
     end
 
@@ -30,16 +30,34 @@ module HTTP2
     end
 
     def receive(frame : Frame)
-      previous_state = @state
       case @state
       when State::IDLE
         case frame.type
         when Frame::Type::PushPromise
           @state = State::RESERVED_REMOTE
+          emit(:reserved_remote, self)
         when Frame::Type::Headers
-          @state = State::OPEN
+          if frame.flags.includes? Frame::Flags::EndStream
+            @state = State::HALF_CLOSED_REMOTE
+            emit(:half_closed_remote, self)
+          else
+            @state = State::OPEN
+            emit(:open, self)
+          end
         else
-          raise NotImplementedError.new("#{@state} + #{frame.type} = ?")
+          raise Error.new(Error::Code::PROTOCOL_ERROR)
+        end
+
+      when State::HALF_CLOSED_REMOTE
+        case frame.type
+        when Frame::Type::WindowUpdate
+          # nothing
+        when Frame::Type::Priority
+          # nothing
+        when Frame::Type::RstStream
+          @state = State::CLOSED
+        else
+          raise Error.new(Error::Code::STREAM_CLOSED)
         end
 
       when State::RESERVED_LOCAL
@@ -52,26 +70,17 @@ module HTTP2
       else
         raise NotImplementedError.new("#{@state}")
       end
-
-      emit(:state_change, self)
-
-      if frame.flags.includes?(Frame::Flags::EndStream)
-        previous_state = @state
-        if @state == State::OPEN
-          @state = State::HALF_CLOSED_REMOTE
-        elsif @state == State::HALF_CLOSED_LOCAL
-          @state = State::CLOSED
-        end
-
-        emit(:state_change, self)
-      end
     end
 
-    def send_response(headers : Array(Array(String)), data : Slice(UInt8))
-      header_block = @connection.hpack_encoder.encode(headers)
-      @connection.send_frame(Frame.new(Frame::Type::Headers, id, Frame::Flags::EndHeaders, header_block))
-      @connection.send_frame(Frame.new(Frame::Type::Data, id, Frame::Flags::EndStream, data.to_slice))
-      nil
+
+    def headers(payload : Slice(UInt8))
+      f = Frame.new(Frame::Type::Headers, id, Frame::Flags::EndHeaders, payload)
+      emit(:frame, f)
+    end
+
+    def data(payload : Slice(UInt8), flags)
+      f = Frame.new(Frame::Type::Data, id, flags, payload)
+      emit(:frame, f)
     end
   end
 end
