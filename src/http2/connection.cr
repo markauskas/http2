@@ -65,10 +65,10 @@ module HTTP2
       send_frame(frame)
     end
 
-    def send_rst_stream(error_code : UInt32)
+    def send_rst_stream(error_code : Error::Code)
       payload = MemoryIO.new
-      payload.write_bytes(error_code, IO::ByteFormat::BigEndian)
-      frame = Frame.new(Frame::Type::RstStream, 0_u32, Frame::Flags::None, payload.to_slice)
+      payload.write_bytes(error_code.value, IO::ByteFormat::BigEndian)
+      frame = Frame.new(Frame::Type::RstStream, @last_stream_id, Frame::Flags::None, payload.to_slice)
       send_frame(frame)
     end
 
@@ -160,6 +160,8 @@ module HTTP2
       when Error::Code::COMPRESSION_ERROR
         send_goaway(ex.error_code)
         @io.close
+      when Error::Code::STREAM_CLOSED
+        send_rst_stream(ex.error_code)
       end
     end
 
