@@ -44,6 +44,8 @@ module HTTP2
             @state = State::OPEN
             emit(:open, self)
           end
+        when Frame::Type::Priority
+          # TODO: do something
         else
           raise Error.new(Error::Code::PROTOCOL_ERROR)
         end

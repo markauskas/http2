@@ -111,6 +111,44 @@ module HTTP2
       @streams[stream_id]
     end
 
+    def receive_and_process_frame
+      frame = receive_frame
+      stream = find_or_create_stream(frame.stream_id)
+
+      case frame.type
+      when Frame::Type::Headers
+        stream.headers = process_headers(frame)
+      when Frame::Type::WindowUpdate
+        process_window_update(frame)
+      when Frame::Type::Settings
+        process_settings(frame)
+      when Frame::Type::Ping
+        process_ping(frame)
+      when Frame::Type::Priority
+        process_priority(frame)
+      else
+        raise NotImplementedError.new("Unsupported frame type: #{frame.type}")
+      end
+
+      if frame.stream_id != 0_u32
+        stream.receive(frame)
+      end
+    rescue ex : Error
+      case ex.error_code
+      when Error::Code::FRAME_SIZE_ERROR
+        send_goaway(ex.error_code)
+        @io.close
+      when Error::Code::PROTOCOL_ERROR
+        send_goaway(ex.error_code)
+        @io.close
+      when Error::Code::COMPRESSION_ERROR
+        send_goaway(ex.error_code)
+        @io.close
+      when Error::Code::STREAM_CLOSED
+        send_rst_stream(ex.error_code)
+      end
+    end
+
     def process_settings(frame : Frame)
       raise Error.new(Error::Code::PROTOCOL_ERROR) unless frame.type == Frame::Type::Settings
       raise Error.new(Error::Code::PROTOCOL_ERROR) unless frame.stream_id == 0_u32
@@ -134,37 +172,10 @@ module HTTP2
       end
     end
 
-    def receive_and_process_frame
-      frame = receive_frame
-      stream = find_or_create_stream(frame.stream_id)
-
-      case frame.type
-      when Frame::Type::Headers
-        stream.headers = process_headers(frame)
-      when Frame::Type::WindowUpdate
-        process_window_update(frame)
-      when Frame::Type::Settings
-        process_settings(frame)
+    def process_ping(frame : Frame)
+      if frame.flags.includes? Frame::Flags::EndStream
       else
-        raise NotImplementedError.new("Unsupported frame type: #{frame.type}")
-      end
-
-      if frame.stream_id != 0_u32
-        stream.receive(frame)
-      end
-    rescue ex : Error
-      case ex.error_code
-      when Error::Code::FRAME_SIZE_ERROR
-        send_goaway(ex.error_code)
-        @io.close
-      when Error::Code::PROTOCOL_ERROR
-        send_goaway(ex.error_code)
-        @io.close
-      when Error::Code::COMPRESSION_ERROR
-        send_goaway(ex.error_code)
-        @io.close
-      when Error::Code::STREAM_CLOSED
-        send_rst_stream(ex.error_code)
+        send_frame Frame.new(Frame::Type::Ping, 0_u32, Frame::Flags::EndStream, frame.payload)
       end
     end
 
@@ -205,6 +216,10 @@ module HTTP2
       payload_io = MemoryIO.new(frame.payload)
       size = payload_io.read_bytes(UInt32, IO::ByteFormat::BigEndian) & 0x7fffffff_u32
       # TODO: do something with the new size"
+    end
+
+    def process_priority(frame)
+      # TODO: do something
     end
   end
 end
