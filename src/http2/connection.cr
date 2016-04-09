@@ -125,7 +125,13 @@ module HTTP2
       when Frame::Type::Ping
         process_ping(frame)
       when Frame::Type::Priority
-        process_priority(frame)
+        # TODO: do something
+      when Frame::Type::Data
+        # TODO: do something
+      when Frame::Type::RstStream
+        # TODO: do something
+      when Frame::Type::Continuation
+        # TODO: do something
       else
         raise NotImplementedError.new("Unsupported frame type: #{frame.type}")
       end
@@ -134,6 +140,7 @@ module HTTP2
         stream.receive(frame)
       end
     rescue ex : Error
+      puts "Error: #{ex.error_code}"
       case ex.error_code
       when Error::Code::FRAME_SIZE_ERROR
         send_goaway(ex.error_code)
@@ -146,6 +153,8 @@ module HTTP2
         @io.close
       when Error::Code::STREAM_CLOSED
         send_rst_stream(ex.error_code)
+      else
+        raise ex
       end
     end
 
@@ -182,33 +191,45 @@ module HTTP2
     def process_headers(frame : Frame)
       stream = find_or_create_stream(frame.stream_id)
 
-      if frame.flags.includes? Frame::Flags::EndHeaders
-        payload_io = MemoryIO.new(frame.payload)
-        length = frame.payload.size.to_u32
+      payload_io = MemoryIO.new(frame.payload)
+      length = frame.payload.size.to_u32
 
-        if frame.flags.includes? Frame::Flags::Padded
-          padding = payload_io.read_byte.not_nil!.to_u32
-          length -= 1       # padding length byte
-          length -= padding # actual padding
-        end
+      if frame.flags.includes? Frame::Flags::Padded
+        padding = payload_io.read_byte.not_nil!.to_u32
+        length -= 1       # padding length byte
+        length -= padding # actual padding
+      end
 
-        if frame.flags.includes? Frame::Flags::Priority
-          # TODO: do something with these values
-          buffer = payload_io.read_bytes(UInt32, IO::ByteFormat::BigEndian)
-          stream_dependency = buffer & 0x7fffffff_u32
-          exclusive = buffer.bit(31) == 1_u8
-          weight = payload_io.read_byte.not_nil!
-          length -= 5_u32
-        end
+      if frame.flags.includes? Frame::Flags::Priority
+        # TODO: do something with these values
+        buffer = payload_io.read_bytes(UInt32, IO::ByteFormat::BigEndian)
+        stream_dependency = buffer & 0x7fffffff_u32
+        exclusive = buffer.bit(31) == 1_u8
+        weight = payload_io.read_byte.not_nil!
+        length -= 5_u32
+      end
 
-        header_block = Slice(UInt8).new(length)
-        payload_io.read(header_block)
-      else
-        # TODO: implement
-        raise NotImplementedError.new("Process CONTINUATION frames")
+      header_block = Slice(UInt8).new(length)
+      payload_io.read(header_block)
+
+      unless frame.flags.includes? Frame::Flags::EndHeaders
+        io = MemoryIO.new
+        io.write(header_block)
+        io.write(receive_continuation_frames(stream))
+        header_block = io.to_slice
       end
 
       hpack_decoder.decode(header_block)
+    end
+
+    def receive_continuation_frames(stream : Stream)
+      io = MemoryIO.new
+      while frame = receive_frame(Frame::Type::Continuation)
+        raise Error.new(Error::Code::PROTOCOL_ERROR) if frame.stream_id != stream.id
+        io.write(frame.payload)
+        break if frame.flags.includes?(Frame::Flags::EndHeaders)
+      end
+      io.to_slice
     end
 
     def process_window_update(frame)
@@ -216,10 +237,6 @@ module HTTP2
       payload_io = MemoryIO.new(frame.payload)
       size = payload_io.read_bytes(UInt32, IO::ByteFormat::BigEndian) & 0x7fffffff_u32
       # TODO: do something with the new size"
-    end
-
-    def process_priority(frame)
-      # TODO: do something
     end
   end
 end

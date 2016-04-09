@@ -33,11 +33,8 @@ module HTTP2
       case @state
       when State::IDLE
         case frame.type
-        when Frame::Type::PushPromise
-          @state = State::RESERVED_REMOTE
-          emit(:reserved_remote, self)
         when Frame::Type::Headers
-          if frame.flags.includes? Frame::Flags::EndStream
+          if frame.flags.includes?(Frame::Flags::EndStream)
             @state = State::HALF_CLOSED_REMOTE
             emit(:half_closed_remote, self)
           else
@@ -45,35 +42,41 @@ module HTTP2
             emit(:open, self)
           end
         when Frame::Type::Priority
-          # TODO: do something
+          # TODO: handle priority
         else
           raise Error.new(Error::Code::PROTOCOL_ERROR)
+        end
+
+      when State::OPEN
+        if frame.type == Frame::Type::RstStream
+          @state = State::CLOSED
+          emit(:closed, self)
+        elsif frame.flags.includes?(Frame::Flags::EndStream)
+          @state = State::HALF_CLOSED_REMOTE
+          emit(:half_closed_remote, self)
         end
 
       when State::HALF_CLOSED_REMOTE
         case frame.type
         when Frame::Type::WindowUpdate
-          # nothing
+          # TODO: handle
         when Frame::Type::Priority
-          # nothing
+          # TODO: handle
         when Frame::Type::RstStream
           @state = State::CLOSED
+          emit(:closed, self)
         else
           raise Error.new(Error::Code::STREAM_CLOSED)
         end
 
-      when State::RESERVED_LOCAL
-        case frame.type
-        when Frame::Type::RstStream
-          @state = State::CLOSED
-        else
-          raise NotImplementedError.new("#{@state} + #{frame.type} = ?")
-        end
+      when State::CLOSED
+        # For now we don't accept any frames on closed streams
+        raise Error.new(Error::Code::STREAM_CLOSED)
+
       else
-        raise NotImplementedError.new("#{@state}")
+        raise NotImplementedError.new("Not implemented State: #{@state}")
       end
     end
-
 
     def headers(payload : Slice(UInt8), flags = Frame::Flags::EndHeaders)
       f = Frame.new(Frame::Type::Headers, id, flags, payload)
