@@ -156,6 +156,8 @@ module HTTP2
       else
         raise ex
       end
+    rescue ex : IO::EOFError
+      @io.close
     end
 
     def process_settings(frame : Frame)
