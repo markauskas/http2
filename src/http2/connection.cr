@@ -132,6 +132,8 @@ module HTTP2
         # TODO: do something
       when Frame::Type::Continuation
         # TODO: do something
+      when Frame::Type::GoAway
+        # TODO: do something
       else
         raise NotImplementedError.new("Unsupported frame type: #{frame.type}")
       end
