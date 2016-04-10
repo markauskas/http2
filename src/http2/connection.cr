@@ -45,6 +45,8 @@ module HTTP2
       @last_stream_id = 0_u32 # highest received stream id
       @hpack_encoder = HPACK::Encoder.new
       @hpack_decoder = HPACK::Decoder.new
+
+      @next_stream_id = 2_u32
     end
 
     def inspect
@@ -111,6 +113,22 @@ module HTTP2
       @streams[stream_id]
     end
 
+    def new_stream_id
+      id = @next_stream_id
+      @next_stream_id += 2
+      id
+    end
+
+    def reserve_push_stream
+      id = new_stream_id
+      @streams[id] = Stream.new(id, Stream::State::RESERVED_LOCAL)
+      emit(:stream, @streams[id])
+      @streams[id].on(:frame) do |emittable|
+        send_frame(emittable.to_frame)
+      end
+      @streams[id]
+    end
+
     def receive_and_process_frame
       frame = receive_frame
       stream = find_or_create_stream(frame.stream_id)
@@ -159,6 +177,8 @@ module HTTP2
         raise ex
       end
     rescue ex : IO::EOFError
+      @io.close
+    rescue ex : Errno
       @io.close
     end
 

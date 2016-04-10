@@ -87,5 +87,13 @@ module HTTP2
       f = Frame.new(Frame::Type::Data, id, flags, payload)
       emit(:frame, f)
     end
+
+    def push_promise(stream_id : UInt32, payload : Slice(UInt8))
+      io = MemoryIO.new
+      io.write_bytes(stream_id & 0x7fffffff_u32, IO::ByteFormat::BigEndian)
+      io.write(payload)
+      f = Frame.new(Frame::Type::PushPromise, id, Frame::Flags::EndHeaders, io.to_slice)
+      emit(:frame, f)
+    end
   end
 end
