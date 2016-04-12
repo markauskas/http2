@@ -32,16 +32,18 @@ module HTTP2
     getter stream_id
     getter flags
     getter payload
+    getter headers : Array(Array(String)) | Nil
 
-    def initialize(type : Type, stream_id : UInt32, flags : Flags = Flags::None, payload : Slice(UInt8) = Slice(UInt8).new(0))
-      @type = type
-      @stream_id = stream_id
-      @flags = flags
-      @payload = payload
+    def initialize(@type : Type, @stream_id : UInt32, @flags : Flags, @payload : Slice(UInt8))
     end
 
-    def inspect
-      "#<#{type.to_s.upcase} stream_id=#{stream_id} flags=#{flags.inspect} payload=#{payload.size}B>"
+    # For Headers frames
+    def initialize(@type : Type, @stream_id : UInt32, @flags : Flags, @headers : Array(Array(String)))
+      @payload = Slice(UInt8).new(0)
+    end
+
+    # For PushPromise frames
+    def initialize(@type : Type, @stream_id : UInt32, @flags : Flags, @payload : Slice(UInt8), @headers : Array(Array(String)))
     end
 
     def initialize(io : IO, max_frame_size : UInt32)
@@ -57,16 +59,8 @@ module HTTP2
       io.read(@payload) if length > 0
     end
 
-    def to_slice
-      io = MemoryIO.new
-      io.write_byte((payload.size.to_u32 >> 16).to_u8)
-      io.write_byte((payload.size.to_u32 >> 8).to_u8)
-      io.write_byte(payload.size.to_u8)
-      io.write_byte(type.value)
-      io.write_byte(flags.value)
-      io.write_bytes(stream_id & 0x7ffffff_u32, IO::ByteFormat::BigEndian)
-      io.write(payload)
-      io.to_slice
+    def inspect
+      "#<#{type.to_s.upcase} stream_id=0x#{stream_id.to_s(16)} flags=#{flags.inspect} headers=#{headers.inspect} payload=#{payload.size}B>"
     end
   end
 end

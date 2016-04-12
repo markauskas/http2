@@ -55,7 +55,7 @@ module HTTP2
 
     def send_settings
       # TODO: add payload
-      frame = Frame.new(Frame::Type::Settings, 0_u32)
+      frame = Frame.new(Frame::Type::Settings, 0_u32, Frame::Flags::None, Slice(UInt8).new(0))
       send_frame(frame)
     end
 
@@ -74,8 +74,36 @@ module HTTP2
       send_frame(frame)
     end
 
+    # Converts the Frame to bytes and sends it to the other endpoint.
+    # TODO: split HEADERS, PUSH_PROMISE and DATA frames if needed
     def send_frame(frame : Frame)
-      @io.write(frame.to_slice)
+      case frame.type
+      when Frame::Type::Headers
+        if frame.headers
+          payload = hpack_encoder.encode(frame.headers.not_nil!)
+        else
+          payload = frame.payload
+        end
+      when Frame::Type::PushPromise
+        if frame.headers
+          io = MemoryIO.new
+          io.write(frame.payload)
+          io.write(hpack_encoder.encode(frame.headers.not_nil!))
+          payload = io.to_slice
+        else
+          payload = frame.payload
+        end
+      else
+        payload = frame.payload
+      end
+
+      @io.write_byte((payload.size.to_u32 >> 16).to_u8)
+      @io.write_byte((payload.size.to_u32 >> 8).to_u8)
+      @io.write_byte(payload.size.to_u8)
+      @io.write_byte(frame.type.value)
+      @io.write_byte(frame.flags.value)
+      @io.write_bytes(frame.stream_id & 0x7ffffff_u32, IO::ByteFormat::BigEndian)
+      @io.write(payload)
       emit(:frame_sent, frame)
     end
 
@@ -201,7 +229,7 @@ module HTTP2
           length -= 6
         end
 
-        send_frame Frame.new(Frame::Type::Settings, 0_u32, Frame::Flags::EndStream)
+        send_frame Frame.new(Frame::Type::Settings, 0_u32, Frame::Flags::EndStream, Slice(UInt8).new(0))
       end
     end
 

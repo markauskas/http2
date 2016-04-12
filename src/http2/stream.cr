@@ -78,8 +78,8 @@ module HTTP2
       end
     end
 
-    def headers(payload : Slice(UInt8), flags = Frame::Flags::EndHeaders)
-      f = Frame.new(Frame::Type::Headers, id, flags, payload)
+    def headers(headers : Array(Array(String)), flags = Frame::Flags::EndHeaders)
+      f = Frame.new(Frame::Type::Headers, id, flags, headers)
       emit(:frame, f)
     end
 
@@ -93,6 +93,13 @@ module HTTP2
       io.write_bytes(stream_id & 0x7fffffff_u32, IO::ByteFormat::BigEndian)
       io.write(payload)
       f = Frame.new(Frame::Type::PushPromise, id, Frame::Flags::EndHeaders, io.to_slice)
+      emit(:frame, f)
+    end
+
+    def push_promise(stream_id : UInt32, headers : Array(Array(String)))
+      io = MemoryIO.new
+      io.write_bytes(stream_id & 0x7fffffff_u32, IO::ByteFormat::BigEndian)
+      f = Frame.new(Frame::Type::PushPromise, id, Frame::Flags::EndHeaders, io.to_slice, headers)
       emit(:frame, f)
     end
   end
